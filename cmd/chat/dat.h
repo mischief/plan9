@@ -1,25 +1,15 @@
-enum
-{
-	NHIST	= 1000,
-};
-
 typedef struct Wind Wind;
 struct Wind
 {
 	QLock;
 	u64int		id;
-	Mousectl	*mouse;
-	Keyboardctl	*keyboard;
-	Controlset	*cs;
-	Control		*column;
-	Control		*top;
-	Control		*body;
-	Control		*input;
+	int 		type;		/* 1 = no controls */
+	char		*target;
 
 	Channel		*event;		/* char* */
 
-	int			blines;
-	char		*target;
+	int			kfd;		/* rio cons */
+	int			kpid;		/* keyboard child */
 
 	Wind		*prev;
 	Wind		*next;

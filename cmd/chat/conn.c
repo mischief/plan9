@@ -1,11 +1,7 @@
 #include <u.h>
 #include <libc.h>
 #include <bio.h>
-#include <draw.h>
 #include <thread.h>
-#include <keyboard.h>
-#include <mouse.h>
-#include <control.h>
 
 #include "msg.h"
 #include "dat.h"

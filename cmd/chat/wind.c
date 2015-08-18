@@ -1,17 +1,35 @@
 #include <u.h>
 #include <libc.h>
-#include <bio.h>
-#include <draw.h>
 #include <thread.h>
-#include <keyboard.h>
-#include <mouse.h>
-#include <control.h>
 
 #include "dat.h"
 #include "fns.h"
 
+static void
+kbdproc(void *v)
+{
+	char line[512];
+	int r;
+	Wind *w;
+
+	w = v;
+
+	threadsetname("kbdproc");
+
+	while((r = read(w->kfd, line, sizeof line - 1)) > 0){
+		if(r > 0 && line[r] == '\n')
+			r--;
+
+		line[r] = 0;
+
+		chanprint(w->event, "%s", line);
+	}
+
+	chanclose(w->event);
+}
+
 Wind*
-windmk(Image *scr, char *label, char *target)
+windmk(char *label, char *target)
 {
 	int r;
 	Wind *w;
@@ -23,39 +41,18 @@ windmk(Image *scr, char *label, char *target)
 
 		w->id = jenkinshash(target, strlen(target));
 	}
-	w->keyboard = initkeyboard(nil);
-	w->mouse = initmouse(nil, scr);
-	w->cs = newcontrolset(scr, w->keyboard->c, w->mouse->c, w->mouse->resizec);
-	w->column = createcolumn(w->cs, "column");
-	w->top = createlabel(w->cs, "top");
-	w->body = createtext(w->cs, "body");
-	w->input = createentry(w->cs, "input");
-
-	w->event = chancreate(sizeof(char*), 0);
-
-	w->blines = 0;
 
 	if(target != nil)
 		w->target = strdup(target);
 
-	ctlprint(w->top, "value %s", label);
-	ctlprint(w->top, "border 1");
-	ctlprint(w->top, "size %d %d %d %d", 10, font->height+1, 10000, font->height+1);
+	w->event = chancreate(sizeof(char*), 0);
+	w->kpid = -1;
 
-	ctlprint(w->body, "border 1");
-	ctlprint(w->body, "scroll 1");
+	if((w->kfd = open("/dev/cons", ORDWR)) < 0){
+		sysfatal("open: %r");
+	}
 
-	ctlprint(w->input, "border 1");
-	ctlprint(w->input, "size %d %d %d %d", 10, font->height+1, 10000, font->height+1);
-	controlwire(w->input, "event", w->event);
-
-	activate(w->body);
-	activate(w->input);
-
-	chanprint(w->cs->ctl, "column add top");
-	chanprint(w->cs->ctl, "column add body");
-	chanprint(w->cs->ctl, "column add input");
-
+	w->kpid = proccreate(kbdproc, w, 8192);
 	return w;
 }
 
@@ -64,12 +61,12 @@ windfree(Wind *w)
 {
 	qlock(w);
 
-	/* close mouse first so that controlset is draining the channels */
-	closecontrolset(w->cs);
-	closemouse(w->mouse);
-	closekeyboard(w->keyboard);
+	if(w->kpid > 0)
+		postnote(PNPROC, w->kpid, "die yankee pig dog");
+
 	if(w->event != nil)
 		chanfree(w->event);
+
 	free(w->target);
 	free(w);
 }
@@ -120,11 +117,10 @@ windfind(Wind *l, char *target)
 void
 windappend(Wind *w, char *msg)
 {
-	ctlprint(w->body, "add %#q", msg);
 	qlock(w);
-	if(w->blines >= NHIST)
-		ctlprint(w->body, "delete 0");
-	else
-		w->blines++;
+
+	write(w->kfd, msg, strlen(msg));
+	write(w->kfd, "\n", 1);
+
 	qunlock(w);
 }
