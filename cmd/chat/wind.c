@@ -29,7 +29,7 @@ kbdproc(void *v)
 }
 
 Wind*
-windmk(char *label, char *target)
+windmk(char *target)
 {
 	int r;
 	Wind *w;

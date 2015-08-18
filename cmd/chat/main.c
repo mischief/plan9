@@ -29,10 +29,11 @@ windproc(void *v)
 	if(riowindow("-dy 200") < 0)
 		sysfatal("newwindow: %r");
 
-	w = windmk(name, name);
+	riolabel(name);
+
+	w = windmk(name);
 	windlink(mainwind, w);
 
-	riolabel(name);
 	free(name);
 
 	windevents(w);
@@ -75,9 +76,10 @@ windevents(Wind *w)
 			if(ct != nil){
 				switch(ct->index){
 				case CMexit:
+					free(cb);
+				part:
 					if(w->target != nil && w->target[0] == '#')
 						connwrite(conn, "PART %s", w->target);
-					free(cb);
 					goto done;
 					break;
 				case CMquery:
@@ -99,6 +101,10 @@ windevents(Wind *w)
 		}
 		free(s);
 	}
+
+	/* make sure to part on rio del */
+	if(w->target != nil && w->target[0] == '#')
+		goto part;
 
 done:
 	return;
@@ -197,7 +203,9 @@ threadmain(int argc, char *argv[])
 	if(addr == nil)
 		addr = "tcp!chat.freenode.net!6667";
 
-	mainwind = windmk(addr, nil);
+	riolabel(addr);
+
+	mainwind = windmk(nil);
 	conn = connmk(addr, onreconnect);
 	conn->rpid = proccreate(connproc, conn, 16*1024);
 	threadcreate(msgthread, conn, 8192);

@@ -15,7 +15,7 @@ u64int jenkinshash(char *key, int len)
 	return hash;
 }
 
-void
+static void
 fwrites(char *f, char *s)
 {
 	int fd;

@@ -10,7 +10,7 @@ void	rioclose(void);
 int	riowindow(char*);
 
 /* wind.c */
-Wind	*windmk(char*, char*);
+Wind	*windmk(char*);
 void	windfree(Wind*);
 void	windlink(Wind*, Wind*);
 void	windunlink(Wind*, Wind*);
