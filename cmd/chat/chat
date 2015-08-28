@@ -21,12 +21,13 @@ also recognizes the following control
 messages:
 .TP
 .B /q \fItarget\fR
-A new window is opened which sends to and
-receives messages from the
+This opens a new window that relays
+messages to the
 .I target.
 The
 .I target
-is either a channel or a nick. This window
+can be a channel or a nick.
+The created window
 also accepts control messages.
 .TP
 .BI /x
@@ -34,7 +35,8 @@ Closes a window and parts. If sent to
 the main window, the connection is closed
 and the program exits.
 .SH EXAMPLES
-Connect to #cat-v and then open a window to message glenda:
+Join #cat-v and then open a private
+message window with glenda:
 .br
 .ne 3
 .IP
