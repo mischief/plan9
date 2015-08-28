@@ -1,0 +1,49 @@
+.TH CHAT 1
+.SH NAME
+chat \- internet relay chat client
+.SH SYNOPSIS
+.B chat
+.SH DESCRIPTION
+.I Chat
+is an
+.B IRC
+client. It connects to
+chat.freenode.net at port at port 6667
+or the server specified in the
+.B $irc
+environment variable (see
+.IR dial (2))
+and reads raw
+.B IRC
+commands from standard input.
+.I Chat
+also recognizes the following control
+messages:
+.TP
+.B /q \fItarget\fR
+A new window is opened which sends to and
+receives messages from the
+.I target.
+The
+.I target
+is either a channel or a nick. This window
+also accepts control messages.
+.TP
+.BI /x
+Closes a window and parts. If sent to
+the main window, the connection is closed
+and the program exits.
+.SH EXAMPLES
+Connect to #cat-v and then open a window to message glenda:
+.br
+.ne 3
+.IP
+.EX
+chat
+/q #cat-v
+/q glenda
+.EE
+.SH SOURCE
+https://bitbucket.org/mischief/chat
+.SH SEE ALSO
+.IR ircrc (1)
