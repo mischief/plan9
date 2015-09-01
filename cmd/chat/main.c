@@ -26,7 +26,7 @@ windproc(void *v)
 	/* copy ns since we fiddle with the namespace for graphics */
 	rfork(RFNAMEG);
 
-	if(riowindow("-dy 200") < 0)
+	if(riowindow("-scroll -dy 200") < 0)
 		sysfatal("newwindow: %r");
 
 	riolabel(name);
