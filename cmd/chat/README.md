@@ -12,8 +12,6 @@ install
 	mk install
 	man chat
 	chat
-	/q #cat-v
-	/n doofus
 
 uninstall
 ---------

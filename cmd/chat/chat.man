@@ -34,6 +34,10 @@ also accepts control messages.
 Closes a window and parts. If sent to
 the main window, the connection is closed
 and the program exits.
+.TP
+.B /n \fIdoofus\fR
+Change nicknames to
+.I doofus.
 .SH EXAMPLES
 Join #cat-v and then open a private
 message window with glenda:
