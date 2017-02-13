@@ -115,11 +115,16 @@ windfind(Wind *l, char *target)
 }
 
 void
-windappend(Wind *w, char *msg)
+windappend(Wind *w, char *msg, ...)
 {
+	va_list arg;
+
 	qlock(w);
 
-	write(w->kfd, msg, strlen(msg));
+	va_start(arg, msg);
+	vfprint(w->kfd, msg, arg);
+	va_end(arg);
+
 	write(w->kfd, "\n", 1);
 
 	qunlock(w);

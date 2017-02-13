@@ -21,6 +21,7 @@ struct Conn
 	QLock;
 	char	*dial;
 	void	(*reconnect)(Conn*);
+	char	*nick;
 	int		fd;
 	Channel *out;	/* char* */
 	int		rpid;

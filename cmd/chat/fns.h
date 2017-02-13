@@ -15,4 +15,4 @@ void	windfree(Wind*);
 void	windlink(Wind*, Wind*);
 void	windunlink(Wind*, Wind*);
 Wind*	windfind(Wind*, char*);
-void	windappend(Wind*, char*);
+void	windappend(Wind*, char*, ...);

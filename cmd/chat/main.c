@@ -60,6 +60,8 @@ Cmdtab inputtab[] =
 	CMexit,		"exit",		1,
 	CMquery,	"q",		2,
 	CMquery,	"query",	2,
+	CMnick,		"n",		2,
+	CMnick,		"nick",		2,
 };
 
 void
@@ -73,23 +75,33 @@ windevents(Wind *w)
 		if(s[0] == '/' && strlen(s) > 1){
 			cb = parsecmd(s+1, strlen(s+1));
 			ct = lookupcmd(cb, inputtab, nelem(inputtab));
-			if(ct != nil){
-				switch(ct->index){
-				case CMexit:
-					free(cb);
-				part:
-					if(w->target != nil && w->target[0] == '#')
-						connwrite(conn, "PART %s", w->target);
-					goto done;
-					break;
-				case CMquery:
-					if(cb->f[1][0] == '#'){
-						connwrite(conn, "JOIN %s", cb->f[1]);
-					}
-					name = strdup(cb->f[1]);
-					proccreate(windproc, name, 8192);
-					break;
+			if(ct == nil){
+				windappend(w, "* invalid command %q", cb->f[0]);
+				continue;
+			}
+
+			switch(ct->index){
+			case CMexit:
+				free(cb);
+			part:
+				if(w->target != nil && w->target[0] == '#')
+					connwrite(conn, "PART %s", w->target);
+				goto done;
+				break;
+			case CMquery:
+				if(cb->f[1][0] == '#'){
+					connwrite(conn, "JOIN %s", cb->f[1]);
 				}
+				name = strdup(cb->f[1]);
+				proccreate(windproc, name, 8192);
+				break;
+			case CMnick:
+				qlock(conn);
+				free(conn->nick);
+				conn->nick = strdup(cb->f[1]);
+				qunlock(conn);
+				connwrite(conn, "NICK %s", cb->f[1]);
+				break;
 			}
 			free(cb);
 		} else {
@@ -133,7 +145,15 @@ msgthread(void *v)
 				strcat(buf, m->args[r]);
 			}
 
-			if(cistrcmp(m->cmd, "PING") == 0){
+			if(strcmp(m->cmd, "433") == 0){
+				qlock(c);
+				snprint(buf, sizeof buf, "%s%d", c->nick, 10+nrand(1000));
+				windappend(mainwind, "nickname %q in use, switching to %q", c->nick, buf);
+				free(c->nick);
+				c->nick = strdup(buf);
+				qunlock(c);
+				connwrite(c, "NICK %s", buf);
+			} else if(cistrcmp(m->cmd, "PING") == 0){
 				if(m->nargs > 0)
 					connwrite(c, "PONG :%s", m->args[0]);
 			} else if((cistrcmp(m->cmd, "NOTICE") == 0 || cistrcmp(m->cmd, "PRIVMSG") == 0) && m->nargs > 1){
@@ -176,10 +196,12 @@ onreconnect(Conn *c)
 	char buf[256];
 	Wind *w;
 
-	snprint(buf, sizeof buf, "reconnected to %s", c->dial);
-	windappend(mainwind, buf);
+	windappend(mainwind, "reconnected to %s", c->dial);
 	connwrite(c, "USER none 0 * :none");
-	connwrite(c, "NICK %s-%d", getuser(), getpid());
+	qlock(c);
+	snprint(buf, sizeof(buf), "%s", c->nick);
+	qunlock(c);
+	connwrite(c, "NICK %s", buf);
 
 	qlock(mainwind);
 	for(w = mainwind; w != nil; w = w->next){
@@ -190,12 +212,27 @@ onreconnect(Conn *c)
 }
 
 void
+usage(void)
+{
+	fprint(2, "usage: %s\n", argv0);
+	threadexitsall("usage");
+}
+
+void
 threadmain(int argc, char *argv[])
 {
 	char *addr;
 
 	ARGBEGIN{
+	default:
+		usage();
 	}ARGEND
+
+	if(argc != 0)
+		usage();
+
+	quotefmtinstall();
+	srand(truerand());
 
 	rfork(RFNOTEG);
 
@@ -207,6 +244,7 @@ threadmain(int argc, char *argv[])
 
 	mainwind = windmk(nil);
 	conn = connmk(addr, onreconnect);
+	conn->nick = strdup(getuser());
 	conn->rpid = proccreate(connproc, conn, 16*1024);
 	threadcreate(msgthread, conn, 8192);
 
