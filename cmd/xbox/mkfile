@@ -1,0 +1,15 @@
+</$objtype/mkfile
+
+NUSBLIB=/sys/src/cmd/nusb/lib
+
+TARG=xbox
+OFILES=xbox.$O
+HFILES=\
+	$NUSBLIB/usb.h\
+
+LIB=$NUSBLIB/usb.a$O
+
+BIN=/$objtype/bin/nusb
+
+</sys/src/cmd/mkone
+CFLAGS=-I$NUSBLIB $CFLAGS
