@@ -3,11 +3,17 @@
 chat \- internet relay chat client
 .SH SYNOPSIS
 .B chat
+[
+.B -t
+] [
+.B -a
+.I address
+]
 .SH DESCRIPTION
 .I Chat
 is an
 .B IRC
-client. It connects to
+client. By default, it connects to
 chat.freenode.net at port at port 6667
 or the server specified in the
 .B $irc
@@ -15,7 +21,15 @@ environment variable (see
 .IR dial (2))
 and reads raw
 .B IRC
-commands from standard input.
+commands from standard input. Chat recognizes the following flags:
+.TP
+.B -t
+Connect using TLS.
+.TP
+.B -a
+Set the address to
+.I address.
+.PP
 .I Chat
 also recognizes the following control
 messages:
@@ -50,6 +64,6 @@ chat
 /q glenda
 .EE
 .SH SOURCE
-https://bitbucket.org/mischief/chat
+https://github.com/mischief/plan9
 .SH SEE ALSO
 .IR ircrc (1)

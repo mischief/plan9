@@ -1,8 +1,3 @@
-/* conn.c */
-Conn*	connmk(char*, void(*)(Conn*));
-int	connwrite(Conn*, char*, ...);
-void	connproc(void*);	/* Conn* */
-
 /* util.c */
 u64int	jenkinshash(char*, int);
 void	riolabel(char*);

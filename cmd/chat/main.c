@@ -1,19 +1,24 @@
 #include <u.h>
 #include <libc.h>
+#include <ctype.h>
 #include <thread.h>
 #include <fcall.h>
 #include <9p.h>
+#include <mp.h>
+#include <libsec.h>
 
-#include "msg.h"
+#include "irc.h"
+
 #include "dat.h"
 #include "fns.h"
 
-Wind *mainwind;		/* server window */
-Conn *conn;			/* our connection */
+static Wind *mainwind;		/* server window */
+static Irc *conn;			/* our connection */
+static char *nick;
 
-void windevents(Wind*);
+static void windevents(Wind*);
 
-void
+static void
 windproc(void *v)
 {
 	char *name;
@@ -64,7 +69,7 @@ Cmdtab inputtab[] =
 	CMnick,		"nick",		2,
 };
 
-void
+static void
 windevents(Wind *w)
 {
 	char *s, *name;
@@ -85,30 +90,28 @@ windevents(Wind *w)
 				free(cb);
 			part:
 				if(w->target != nil && w->target[0] == '#')
-					connwrite(conn, "PART %s", w->target);
+					ircpart(conn, w->target);
 				goto done;
 				break;
+
 			case CMquery:
-				if(cb->f[1][0] == '#'){
-					connwrite(conn, "JOIN %s", cb->f[1]);
-				}
+				if(cb->f[1][0] == '#')
+					ircjoin(conn, cb->f[1]);
+
 				name = strdup(cb->f[1]);
 				proccreate(windproc, name, 8192);
 				break;
+
 			case CMnick:
-				qlock(conn);
-				free(conn->nick);
-				conn->nick = strdup(cb->f[1]);
-				qunlock(conn);
-				connwrite(conn, "NICK %s", cb->f[1]);
+				ircnick(conn, cb->f[1]);
 				break;
 			}
 			free(cb);
 		} else {
 			if(w->target != nil){
-				connwrite(conn, "PRIVMSG %s :%s", w->target, s);
+				ircprivmsg(conn, w->target, s);
 			} else {
-				connwrite(conn, "%s", s);
+				ircraw(conn, s);
 			}
 		}
 		free(s);
@@ -122,108 +125,155 @@ done:
 	return;
 }
 
-/*
- * msgproc processes Msg* from connproc.
- */
-void
-msgthread(void *v)
+static void
+on433(Irc *irc, IrcMsg*, void*)
+{
+	char buf[128];
+
+	snprint(buf, sizeof buf, "%s%d", nick, 10+nrand(1000));
+	windappend(mainwind, "nickname %q in use, switching to %q", nick, buf);
+
+	ircnick(irc, buf);
+}
+
+// NOTICE/PRIVMSG
+static void
+msg(Irc*, IrcMsg *m, void*)
 {
 	int r;
-	char *s, buf[1024], prefix[256];
-	Msg *m;
-	Conn *c;
+	char buf[512], prefix[256];
+	char *s;
 	Wind *w;
 
-	c = v;
+	/* user privmsg */
+	strcpy(prefix, m->prefix);
+	if((s = strchr(prefix, '!')) != nil)
+		*s = 0;
 
-	threadsetname("msg");
+	snprint(buf, sizeof buf, "%s>", prefix);
+	for(r = 1; r < m->nargs; r++){
+		strcat(buf, " ");
+		strcat(buf, m->args[r]);
+	}
 
-	while((m = recvp(c->out)) != nil){
-			snprint(buf, sizeof buf, "%s>", m->prefix);
-			for(r = 0; r < m->nargs; r++){
-				strcat(buf, " ");
-				strcat(buf, m->args[r]);
-			}
+	if(m->args[0][0] == '#'){
+		w = windfind(mainwind, m->args[0]);
+	} else {
+		w = windfind(mainwind, prefix);
+	}
 
-			if(strcmp(m->cmd, "433") == 0){
-				qlock(c);
-				snprint(buf, sizeof buf, "%s%d", c->nick, 10+nrand(1000));
-				windappend(mainwind, "nickname %q in use, switching to %q", c->nick, buf);
-				free(c->nick);
-				c->nick = strdup(buf);
-				qunlock(c);
-				connwrite(c, "NICK %s", buf);
-			} else if(cistrcmp(m->cmd, "PING") == 0){
-				if(m->nargs > 0)
-					connwrite(c, "PONG :%s", m->args[0]);
-			} else if((cistrcmp(m->cmd, "NOTICE") == 0 || cistrcmp(m->cmd, "PRIVMSG") == 0) && m->nargs > 1){
-				if((s = strchr(m->prefix, '!')) != nil)
-					*s = 0;
-
-				snprint(buf, sizeof buf, "%s>", m->prefix);
-				for(r = 1; r < m->nargs; r++){
-					strcat(buf, " ");
-					strcat(buf, m->args[r]);
-				}
-
-				if(m->args[0][0] == '#'){
-					w = windfind(mainwind, m->args[0]);
-				} else {
-					/* user privmsg */
-					strcpy(prefix, m->prefix);
-					if((s = strchr(prefix, '!')) != nil)
-						*s = 0;
-
-					w = windfind(mainwind, prefix);
-				}
-
-				if(w != nil){
-					windappend(w, buf);
-				} else {
-					windappend(mainwind, buf);
-				}
-			} else {
-				windappend(mainwind, buf);
-			}
-
-			freemsg(m);
+	if(w != nil){
+		windappend(w, buf);
+	} else {
+		windappend(mainwind, buf);
 	}
 }
 
-void
-onreconnect(Conn *c)
+static int
+inset(char *needle, char **haystack){
+	char **p;
+	for(p = haystack; *p != nil; (*p)++)
+		if(cistrcmp(needle, *p) == 0)
+			return 0;
+
+	return -1;
+}
+
+static void
+catchall(Irc*, IrcMsg *m, void*)
 {
-	char buf[256];
+	int i;
+	char buf[512];
+
+	if(m->cmd[0] == '_')
+		return;
+
+	char *unwanted[]={
+		IRC_PING,
+		IRC_NOTICE,
+		IRC_PRIVMSG,
+		nil,
+	};
+
+	if(inset(m->cmd, unwanted) == 0)
+		return;
+
+	snprint(buf, sizeof buf, "%s>", m->prefix);
+	for(i = 1; i < m->nargs; i++){
+		strcat(buf, " ");
+		strcat(buf, m->args[i]);
+	}
+
+	windappend(mainwind, buf);
+}
+
+static void
+ondisconnect(Irc *, IrcMsg*, void*)
+{
+	windappend(mainwind, "* disconnected *");
+}
+
+static void
+onconnect(Irc *irc, IrcMsg*, void*)
+{
 	Wind *w;
 
-	windappend(mainwind, "reconnected to %s", c->dial);
-	connwrite(c, "USER none 0 * :none");
-	qlock(c);
-	snprint(buf, sizeof(buf), "%s", c->nick);
-	qunlock(c);
-	connwrite(c, "NICK %s", buf);
+	windappend(mainwind, "* connected *");
+	ircuser(irc, "none", "0", "none");
+	ircnick(irc, nick);;
 
 	qlock(mainwind);
 	for(w = mainwind; w != nil; w = w->next){
 		if(w->target != nil && w->target[0] == '#')
-			connwrite(c, "JOIN %s", w->target);
+			ircjoin(irc, w->target);
 	}
 	qunlock(mainwind);
 }
 
-void
+static void
+ircproc(void *v)
+{
+	Irc *irc;
+
+	irc = v;
+
+	procsetname("irc %s", ircconf(irc)->address);
+
+	ircrun(irc);
+}
+
+static void
 usage(void)
 {
-	fprint(2, "usage: %s\n", argv0);
+	fprint(2, "usage: %s [-t] [-a address]\n", argv0);
 	threadexitsall("usage");
+}
+
+static int
+tlsdial(Irc *, IrcConf *conf)
+{
+	TLSconn c;
+	int fd;
+
+	fd = dial(conf->address, nil, nil, nil);
+	if(fd < 0)
+		return -1;
+	return tlsClient(fd, &c);
 }
 
 void
 threadmain(int argc, char *argv[])
 {
-	char *addr;
+	IrcConf conf = { 0 };
+	char *address = getenv("irc");
 
 	ARGBEGIN{
+	case 't':
+		conf.dial = tlsdial;
+		break;
+	case 'a':
+		address = EARGF(usage());
+		break;
 	default:
 		usage();
 	}ARGEND
@@ -236,17 +286,27 @@ threadmain(int argc, char *argv[])
 
 	rfork(RFNOTEG);
 
-	addr = getenv("irc");
-	if(addr == nil)
-		addr = "tcp!chat.freenode.net!6667";
+	if(address == nil)
+		address = "tcp!chat.freenode.net!6667";
 
-	riolabel(addr);
+	conf.address = address;
+	nick = getuser();
+
+	riolabel(address);
 
 	mainwind = windmk(nil);
-	conn = connmk(addr, onreconnect);
-	conn->nick = strdup(getuser());
-	conn->rpid = proccreate(connproc, conn, 16*1024);
-	threadcreate(msgthread, conn, 8192);
+
+	conn = ircinit(&conf);
+	irchook(conn, IRC_CONNECT, onconnect);
+	irchook(conn, IRC_DISCONNECT, ondisconnect);
+	irchook(conn, IRC_ERR_NICKNAMEINUSE, on433);
+	irchook(conn, IRC_PRIVMSG, msg);
+	irchook(conn, IRC_NOTICE, msg);
+	irchook(conn, nil, catchall);
+	
+	proccreate(ircproc, conn, 16*1024);
+
+	procsetname("main window");
 
 	windevents(mainwind);
 

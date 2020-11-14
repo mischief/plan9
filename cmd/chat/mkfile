@@ -3,11 +3,11 @@
 BIN=/$objtype/bin
 TARG=chat
 OFILES=\
-	conn.$O\
 	main.$O\
-	msg.$O\
 	util.$O\
 	wind.$O\
+
+LIB=/$objtype/lib/libirc.a
 
 MAN=/sys/man/1
 
