@@ -1,0 +1,20 @@
+</$objtype/mkfile
+
+P=irc
+
+LIB=lib$P.$O.a
+OFILES=$P.$O
+HFILES=/sys/include/$P.h
+
+</sys/src/cmd/mklib
+
+install:V:	$LIB
+	cp $LIB /$objtype/lib/lib$P.a
+	cp $P.h /sys/include/$P.h
+	#cp $P.man2 /sys/man/2/$P
+
+uninstall:V:
+	rm -f /$objtype/lib/lib$P.a /sys/include/$P.h /sys/man/2/$P
+
+$O.test: test.$O $LIB
+	$LD -o $target $prereq
