@@ -1,0 +1,137 @@
+diff --git a/sys/src/cmd/rio/rio.c b/sys/src/cmd/rio/rio.c
+--- a/sys/src/cmd/rio/rio.c
++++ b/sys/src/cmd/rio/rio.c
+@@ -29,7 +29,7 @@ void		newtile(int);
+ Image*	sweep(void);
+ Image*	bandsize(Window*);
+ Image*	drag(Window*);
+-void		resized(void);
++void		resized(int);
+ Channel	*exitchan;	/* chan(int) */
+ Channel	*winclosechan; /* chan(Window*); */
+ Channel	*kbdchan;	/* chan(char*); */
+@@ -472,7 +472,7 @@ mousethread(void*)
+ 	for(;;)
+ 	    switch(alt(alts)){
+ 		case MReshape:
+-			resized();
++			resized(1);
+ 			break;
+ 		case MMouse:
+ 			if(wkeyboard!=nil && (mouse->buttons & (1<<5))){
+@@ -578,7 +578,7 @@ wtopcmp(void *a, void *b)
+ }
+ 
+ void
+-resized(void)
++resized(int new)
+ {
+ 	Image *im;
+ 	int i, j;
+@@ -586,6 +586,7 @@ resized(void)
+ 	Point o, n;
+ 	Window *w;
+ 
++	if(new){
+ 	if(getwindow(display, Refnone) < 0)
+ 		error("failed to re-attach window");
+ 	freescrtemps();
+@@ -594,7 +595,8 @@ resized(void)
+ 	wscreen = allocscreen(screen, background, 0);
+ 	if(wscreen == nil)
+ 		error("can't re-allocate screen");
+-	draw(view, view->r, background, nil, ZP);
++	}
++	draw(view, view->r, background, nil, view->r.min);
+ 	o = subpt(viewr.max, viewr.min);
+ 	n = subpt(view->clipr.max, view->clipr.min);
+ 	qsort(window, nwindow, sizeof(window[0]), wtopcmp);
+diff --git a/sys/src/cmd/rio/wctl.c b/sys/src/cmd/rio/wctl.c
+--- a/sys/src/cmd/rio/wctl.c
++++ b/sys/src/cmd/rio/wctl.c
+@@ -30,6 +30,7 @@ enum
+ 	Hide,
+ 	Unhide,
+ 	Delete,
++	Background,
+ };
+ 
+ static char *cmds[] = {
+@@ -45,6 +46,7 @@ static char *cmds[] = {
+ 	[Hide]	= "hide",
+ 	[Unhide]	= "unhide",
+ 	[Delete]	= "delete",
++	[Background]	= "background",
+ 	nil
+ };
+ 
+@@ -301,7 +303,7 @@ parsewctl(char **argp, Rectangle r, Rect
+ 
+ 	while(isspace(*s))
+ 		s++;
+-	if(cmd!=New && *s!='\0'){
++	if((cmd!=New && cmd!=Background) && *s!='\0'){
+ 		strcpy(err, "extraneous text in wctl message");
+ 		return -1;
+ 	}
+@@ -440,6 +442,33 @@ wctlcmd(Window *w, Rectangle r, int cmd,
+ 	return -1;
+ }
+ 
++static void
++wctlbackground(char *file)
++{
++	int fd;
++	char *n;
++	Image *i;
++
++	if((n = strchr(file, '\n')) != nil)
++		*n = '\0';
++
++	fd = open(file, OREAD);
++	if(fd < 0)
++		return;
++	i = readimage(display, fd, 0);
++	if(i == nil)
++		fprint(2, "readimage: %r\n");
++	close(fd);
++	if(i != nil){
++		freeimage(background);
++		background = allocimage(display, Rect(0, 0, Dx(i->r), Dy(i->r)), RGBA32, 1, DBlack);
++		draw(background, background->r, i, nil, i->r.min);
++		freeimage(i);
++		extern void resized(int);
++		resized(0);
++	}
++}
++
+ int
+ writewctl(Xfid *x, char *err)
+ {
+@@ -473,6 +502,13 @@ writewctl(Xfid *x, char *err)
+ 		if(pid > 0)
+ 			wsetpid(w, pid, 0);
+ 		return 1;
++	case Background:
++		if(*arg == '\0'){
++			strcpy(err, "invalid argument");
++			return -1;
++		}
++		wctlbackground(arg);
++		return 1;
+ 	}
+ 
+ 	incref(w);
+@@ -502,6 +538,12 @@ wctlthread(void *v)
+ 		switch(cmd){
+ 		case New:
+ 			wctlnew(rect, arg, pid, hideit, scrollit, dir, err);
++			break;
++		case Background:
++			if(*arg == '\0')
++				break;
++			wctlbackground(arg);
++			break;
+ 		}
+ 		free(buf);
+ 	}

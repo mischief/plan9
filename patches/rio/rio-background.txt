@@ -1,0 +1,5 @@
+gives rio a new wctl command to set the background image.
+
+example usage:
+
+	echo background $home/smiley.bit >> $wctl
