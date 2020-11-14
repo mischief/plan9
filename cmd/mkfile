@@ -1,0 +1,16 @@
+DIRS=`{ls -dF * | grep '/$'}
+
+default:VQ:
+	echo mk all, mk install, mk uninstall
+	echo mk clean, mk nuke
+
+all install uninstall clean nuke:QV:
+	mk $MKFLAGS recurse.$target
+
+recurse.%:QV:
+	for(f in $DIRS)
+		@{
+			echo ' ' $f
+			cd $f
+			mk $MKFLAGS $stem
+		}

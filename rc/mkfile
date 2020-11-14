@@ -1,8 +1,17 @@
-install:V:
-	for(f in *){
-		if(! ~ $f mkfile){
-			echo $f
-			cp $f $home/bin/rc
-		}
-		status=''
-	}
+FILES=`{ls | grep -v mkfile}
+
+default:VQ:
+	echo mk all, mk install, mk uninstall
+
+all clean nuke:QV:
+	echo -n
+
+install:V: ${FILES:%=%.install}
+
+%.install:V:
+	cp -x $stem /rc/bin/$stem
+
+uninstall:QV: ${FILES:%=%.uninstall}
+
+%.uninstall:V:
+	rm -f /rc/bin/$stem
