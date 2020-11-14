@@ -1,0 +1,28 @@
+#!/bin/rc
+
+flagfmt='l:litterbox'
+args='files...'
+
+if(! ifs=() eval `{aux/getflags $*} || ~ $#* 0){
+	aux/usage
+	exit usage
+}
+
+extra=()
+url = https://catbox.moe/
+form = /user/api.php
+
+fn up {
+	hpost -u $url -m $form $extra reqtype:fileupload userhash: fileToUpload@^$1
+}
+
+if(~ $litterbox 1){
+	extra = time:12h
+	url = https://litterbox.catbox.moe
+	form = /resources/internals/api.php
+}
+
+for(i){
+	up $i
+	echo
+}

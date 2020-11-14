@@ -1,0 +1,8 @@
+install:V:
+	for(f in *){
+		if(! ~ $f mkfile){
+			echo $f
+			cp $f $home/bin/rc
+		}
+		status=''
+	}
