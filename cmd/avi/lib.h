@@ -7,14 +7,14 @@ typedef struct AVI AVI;
 
 struct BITMAPINFO {
 	u32int size;
-	int width;
-	int height;
+	u32int width;
+	u32int height;
 	u16int planes;
 	u16int bitcount;
 	u32int compression;
 	u32int sizeimage;
-	int xppm;
-	int yppm;
+	u32int xppm;
+	u32int yppm;
 	u32int clrused;
 	u32int clrimportant;
 };
@@ -40,14 +40,15 @@ struct AVIMainHeader {
 	u32int suggestedbuffersize;
 	u32int width;
 	u32int height;
-	u32int reserved2;
+	u32int reserved2[4];
 };
 
 struct AVIStreamHeader {
 	char type[4];
 	char handler[4];
 	u32int flags;
-	u32int priority;
+	u16int priority;
+	u16int language;
 	u32int initialframes;
 	u32int scale;
 	u32int rate;

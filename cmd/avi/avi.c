@@ -1,169 +1,138 @@
 #include <u.h>
 #include <libc.h>
 #include <bio.h>
+#include <draw.h>
+#include <memdraw.h>
+#include <thread.h>
+#include <keyboard.h>
+
+#include "imagefile.h"
 
 #include "riff.h"
-#include "avi.h"
+#include "lib.h"
+#include "fns.h"
+#include "player.h"
+
+int mainstacksize = 128*1024;
+int debug = 0;
 
 void
-avidump(AVI *avi)
+copyout(Biobuf *bio, long off, long len, int out)
 {
-	int i;
-	AVIMainHeader *avih;
-	AVIStreamHeader *strh;
-	WAVEFORMATEX *wf;
+	char *buf;
 
-	avih = &avi->header;
+	Bseek(bio, off, 0);
 
-	fprint(2, "AVI main header\n");
-	fprint(2, "\tframes = %ud, ms/frame = %ud\n",
-		avih->totalframes, avih->microsperframe/1000);
-	fprint(2, "\t%ud streams, %udx%ud\n",
-		avih->streams, avih->width, avih->height);
-	fprint(2, "\tflags = %b\n", avih->flags);
+	buf = mallocz(len, 1);
+	if(buf == nil)
+		sysfatal("mallocz: %r");
 
-	//vdelay = avih.microsperframe/1000;
-	//print("Delay = %dms\n", vdelay);
+	if(Bread(bio, buf, len) != len)
+		sysfatal("readn: %r");
 
-	// dump stream header
-	for(i = 0; i < nelem(avi->stream); i++){
-		strh = &avi->stream[i];
-		fprint(2, "AVI Stream: '%.4s' '%.4s'\n", strh->type, strh->handler);
-		fprint(2, "\tflags %b\n", strh->flags);
-		fprint(2, "\trate %ud/%ud\n", strh->rate, strh->scale);
-		fprint(2, "\tstart %ud length %ud quality %ud samplesize %ud\n",
-			strh->start, strh->length, strh->quality, strh->samplesize);
-	}
+	if(write(out, buf, len) != len)
+		sysfatal("write: %r");
 
-	wf = &avi->waveformat;
-	fprint(2, "AVI Wave format: tag %hux %hud channels %hud bit @ %udHz depth\n",
-				wf->tag, wf->channels, wf->bitspersample, wf->samplespersec);
-
-	fprint(2, "AVI Index: %lud entries\n", avi->nindex);
+	free(buf);
 }
 
-static int
-avichunk(AVI *avi, RiffChunk *c)
+/*
+static void
+playavi(Biobuf *bio)
 {
-	AVIStreamHeader strh;
+	vlong start, dt;
+	AVIIndex *idxp;
 
-	//fprint(2, "Chunk: '%.4s' form '%.4s' %lud bytes @ %lld\n",
-	//	c->type, c->form, c->size, c->offset);
+	for(curindex = 0; curindex < indexlen; curindex++){
+		idxp = &index[curindex];
 
-	if(memcmp(c->form, "movi", 4) == 0)
-		avi->movi = c->offset;
+		start = nsec();
+		//pindent(),print("index %.4s flags %08ub offset %ud length %ud\n", idxp->id, idxp->flags, idxp->offset, idxp->length);
 
-	if(rifftype(c, "avih") == 0){
-		if(riffread(c, avi->bio, &avi->header, sizeof(AVIMainHeader)) < 0)
-			return -1;
-	}
-
-	// messy, but ¯\_(ツ)_/¯
-	if(rifftype(c, "strh") == 0){
-		if(riffread(c, avi->bio, &strh, sizeof(strh)) < 0)
-			sysfatal("riffread: %r");
-
-		if(memcmp(strh.type, "vids", 4) == 0){
-			avi->stream[0] = strh;
-			Bseek(avi->bio, c->offset+c->size+(c->size&1), 0);
-			if(riffchunk(c, avi->bio) < 0)
-				return -1;
-
-			if(rifftype(c, "strf") != 0)
-				return -1;
-
-			if(riffread(c, avi->bio, &avi->bitmap, sizeof(avi->bitmap)) < 0)
-				return -1;
+		// offset is relative to 'movi' start, +4 to skip size
+		if(memcmp(idxp->id, "00dc", 4) == 0){
+			//putjpg(movioff+idxp->offset+4);
+			//copyout(bio, movioff+idxp->offset+4, idxp->length, video);
 		}
 
-		if(memcmp(strh.type, "auds", 4) == 0){
-			avi->stream[1] = strh;
-			Bseek(avi->bio, c->offset+c->size+(c->size&1), 0);
-			if(riffchunk(c, avi->bio) < 0)
-				return -1;
+		//if(memcmp(idxp->id, "01wb", 4) == 0)
+			//copyout(bio, movioff+idxp->offset+4, idxp->length, audio);
 
-			if(rifftype(c, "strf") != 0)
-				return -1;
-
-			if(riffread(c, avi->bio, &avi->waveformat, sizeof(avi->waveformat)) < 0)
-				return -1;
-		}
+		dt = (nsec() - start)/1000000;
+		fprint(2, "dt=%lldms\n", dt);
+		doevent();
 	}
+}
+*/
 
-	if(rifftype(c, "idx1") == 0){
-		avi->index = riffsnarf(c, avi->bio);
-		if(avi->index == nil)
-			return -1;
-		avi->nindex = c->size/sizeof(AVIIndex);
-	}
-
-	return 0;
+static void
+usage(void)
+{
+	fprint(2, "usage: %s [-D] file.avi\n", argv0);
+	threadexitsall("usage");
 }
 
-static int
-aviload(AVI *avi, RiffChunk *outer)
+void
+threadmain(int argc, char *argv[])
 {
-	RiffChunk chunk;
-	vlong start, off, end;
-
-	start = off = Boffset(avi->bio);
-	end = start + outer->size;
-
-	while(off != end){
-		if(riffchunk(&chunk, avi->bio) < 0)
-			return -1;
-
-		if(avichunk(avi, &chunk) < 0)
-			return -1;
-
-		if(rifftype(&chunk, "LIST") == 0 && memcmp(chunk.form, "movi", 4) != 0){
-			if(aviload(avi, &chunk) < 0)
-				return -1;
-		}
-
-		// &1 to account for RIFF padding
-		off = Bseek(avi->bio, chunk.offset+chunk.size+(chunk.size&1), 0);
-	}
-
-	return 0;
-}
-
-AVI*
-aviopen(char *name)
-{
-	Biobuf *bio;
-	RiffChunk r;
 	AVI *avi;
+	AVIPlayer *player;
 
-	bio = Bopen(name, OREAD);
-	if(bio == nil)
-		return nil;
+	ARGBEGIN{
+	case 'D':
+		debug++;
+		break;
+	default:
+		usage();
+	}ARGEND
 
-	if(riffchunk(&r, bio) < 0){
-		Bterm(bio);
-		return nil;
-	}
+	if(argc != 1)
+		usage();
 
-	if(rifftype(&r, "RIFF") != 0){
-		Bterm(bio);
-		werrstr("%s: not a RIFF", name);
-		return nil;
-	}
+	memimageinit();
+	fmtinstall('H', encodefmt);
 
-	avi = mallocz(sizeof(AVI), 1);
-	if(avi == nil){
-		Bterm(bio);
-		return nil;
-	}
+	avi = aviopen(argv[0]);
+	if(avi == nil)
+		sysfatal("aviopen: %r");
 
-	snprint(avi->path, sizeof(avi->path), "%s", name);
-	avi->bio = bio;
+	if(debug)
+		avidump(avi);
 
-	if(aviload(avi, &r) < 0){
-		free(avi);
-		Bterm(bio);
-		return nil;
-	}
+	/* we only support a MJPG stream and 16 bit stereo PCM @ 44100hz. */
+	if(memcmp(avi->stream[0].handler, "MJPG", 4) != 0)
+		sysfatal("expected MJPG video, got '%.4s'", avi->stream[0].handler);
+	if(memcmp(avi->stream[1].handler, "\x1\0\0\0", 4) != 0)
+		sysfatal("expected 16-bit 2 channel PCM audio stream @ 44100hz, got '%.4s'", avi->stream[1].handler);
 
-	return avi;
+	if(avi->waveformat.channels != 2 ||
+		avi->waveformat.bitspersample != 16 ||
+		avi->waveformat.samplespersec != 44100)
+		sysfatal("can't handle audio format, expected 16-bit 2 channel PCM audo @ 44100hz\n");
+
+
+/*
+	decin = chancreate(sizeof(Decreq*), 1);
+	decout = chancreate(sizeof(Decreq*), 1);
+
+	if((decoder = decproc(fd, decin, decout)) == nil)
+		sysfatal("decproc: %r");
+*/
+
+	player = playerinit(avi);
+	if(player == nil)
+		sysfatal("playerinit: %r");
+
+	playerrun(player);
+
+	threadexitsall(nil);
 }
+
+/*
+void
+eresized(int new)
+{
+	if(new && getwindow(display, Refnone) < 0)
+		sysfatal("getwindow: %r");
+}
+*/

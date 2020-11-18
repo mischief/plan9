@@ -6,7 +6,7 @@
 #include <memdraw.h>
 
 #include "imagefile.h"
-#include "avi.h"
+#include "lib.h"
 #include "fns.h"
 
 static void

@@ -1,15 +1,23 @@
 </$objtype/mkfile
 
-TARG=avi
+TARG=avi avirec
 
-OFILES=main.$O riff.$O avi.$O player.$O decproc.$O readjpg.$O totruecolor.$O torgbv.$O
 CLEANFILES=imagefile.h
 
 BIN=/$objtype/bin
 
-</sys/src/cmd/mkone
+LIBO=riff.$O lib.$O player.$O decproc.$O readjpg.$O writejpg.$O totruecolor.$O torgbv.$O multichan.$O
+LIB=libavi.$O.a
+LIBOBJ=${LIBO:%=$LIB(%)}
 
-main.$O decproc.$O readjpg.$O totruecolor.$O torgbv.$O: imagefile.h
+</sys/src/cmd/mkmany
+
+avi.$O decproc.$O: imagefile.h
+
+$LIB:	$LIBOBJ
+	ar vu $LIB $newmember
+
+$LIB(%.$O):N:	%.$O
 
 %.$O: /sys/src/cmd/jpg/%.c
 	$CC $CFLAGS /sys/src/cmd/jpg/$stem.c
@@ -19,3 +27,6 @@ imagefile.h: /sys/src/cmd/jpg/imagefile.h
 
 uninstall:V:
 	rm -f $BIN/$TARG
+
+clean nuke:V:
+	rm -f [$OS].* *.[$OS] $LIB $CLEANFILES

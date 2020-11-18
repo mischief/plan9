@@ -7,7 +7,7 @@
 #include <mouse.h>
 #include <keyboard.h>
 
-#include "avi.h"
+#include "lib.h"
 #include "fns.h"
 #include "player.h"
 

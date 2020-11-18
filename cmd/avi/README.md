@@ -15,3 +15,19 @@ Convert a video from NASA into a format avi can play:
 		-vcodec mjpeg -q:v 2 -r 15 \
 		liftoff.avi
 
+# avirec
+
+it's a good idea to write these into a tmpfs in case your real fs is remote or otherwise slow.
+
+## usb camera
+
+	nusb/cam 9
+	avirec -p /shr/usb/cam9.1/video /tmp/rec.avi
+
+## record a rio window
+
+	avirec -p /dev/wsys/10/window /tmp/rec.avi
+
+## record the whole screen
+
+	avirec -p /dev/screen /tmp/rec.avi
