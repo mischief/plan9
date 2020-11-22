@@ -331,6 +331,7 @@ putindex(AVIWriter *a, char *fcc, u32int off, u32int len)
 		p = realloc(a->idx, a->nidx * sizeof(*p));
 		if(p == nil)
 			return -1;
+		a->idx = p;
 	}
 
 	return 0;
