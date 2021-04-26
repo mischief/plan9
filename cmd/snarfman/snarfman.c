@@ -150,7 +150,7 @@ getsnarf(void)
 		return nil;
 	}
 
-	if((n = readn(fd, snf->addr, SNARFMAX)) < 0){
+	if((n = readn(fd, snf->addr, SNARFMAX)) < 1){
 		free(snf->addr);
 		free(snf);
 		close(fd);
